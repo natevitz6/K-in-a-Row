@@ -1,0 +1,1779 @@
+'''GameMasterOffline.py based on GameMaster.py
+
+ Updated Jan. 30, 2025. Previously updated Nov. 17, 2024.
+ See the test function at the end for how to customize
+ the runs: choice of games and agents.
+
+(C) University of Washington and S. Tanimoto, 2025.
+
+Note that this Game Master is not enforcing the time limits
+on moves.  The time limit will typically be important in
+tournament play.
+
+'''
+import time
+from time import sleep
+USE_HTML = True
+if USE_HTML: import gameToHTML
+
+from winTesterForK import winTesterForK
+
+from game_types import TTT, FIAR, Cassini
+
+TIME_PER_MOVE = 1.0 # In seconds
+INITIAL_STATE = TTT.initial_state
+
+ALLOW_CERTAIN_IMPORTS = True
+
+# Establish global variables, with defaults for now.
+K = None
+N = None
+M = None
+TURN_LIMIT = None
+
+# To be called from WebGameAgent if using the web:
+def set_game(game_type):
+    global K, GAME_TYPE, TURN_LIMIT, N, M, INITIAL_STATE
+    K = game_type.k
+    N = game_type.n
+    M = game_type.m
+    GAME_TYPE = game_type
+    TURN_LIMIT = game_type.turn_limit
+    INITIAL_STATE = game_type.initial_state
+
+PLAYERX = None
+PLAYERO = None
+def set_players(px, po):
+    global PLAYERX, PLAYERO
+    PLAYERX = px
+    PLAYERO = po
+    
+FINISHED = False
+def runGame():
+    currentState = INITIAL_STATE
+    player1 = PLAYERX
+    player2 = PLAYERO
+    renderCommentary('The Gamemaster says, "Players, introduce yourselves."')
+    renderCommentary('     (Playing X:) '+player1.introduce())
+    renderCommentary('     (Playing O:) '+player2.introduce())
+
+    if USE_HTML:
+        gameToHTML.startHTML(player1.nickname, player2.nickname, GAME_TYPE.short_name, 1)
+    try:
+        p1comment = player1.prepare(GAME_TYPE, 'X', player2.nickname)
+    except Exception as e:
+        print("Failed to prepare perhaps because: ", e)
+        report = 'Player 1 ('+player1.nickname+' failed to prepare, and loses by default.'
+        renderCommentary(report)
+        if USE_HTML: gameToHTML.reportResult(report)
+        report = 'Congratulations to Player 2 ('+player2.nickname+')!'
+        renderCommentary(report)
+        if USE_HTML: gameToHTML.reportResult(report)
+        if USE_HTML: gameToHTML.endHTML()
+        return
+    try:
+        p2comment = player2.prepare(GAME_TYPE, 'O', player1.nickname)
+    except Exception as e:
+        print("Failed to prepare perhaps because: ", e)
+        report = 'Player 2 ('+player2.nickname+' failed to prepare, and loses by default.'
+        renderCommentary(report)
+        if USE_HTML: gameToHTML.reportResult(report)
+        report = 'Congratulations to Player 1 ('+player1.nickname+')!'
+        renderCommentary(report)
+        if USE_HTML: gameToHTML.reportResult(report)
+        if USE_HTML: gameToHTML.endHTML()
+        return
+        return
+    
+    renderCommentary('The Gamemaster says: We\'re playing '+GAME_TYPE.long_name+'.')
+    renderCommentary('The Gamemaster says: Let\'s Play!')
+    renderCommentary('The initial state is...')
+
+    currentRemark = "The game is starting."
+    if USE_HTML: gameToHTML.stateToHTML(currentState)
+    XsTurn = True
+    name = None
+    global FINISHED
+    FINISHED = False
+    turnCount = 0
+    printState(currentState)
+    while not FINISHED:
+        who = currentState.whose_move
+        if XsTurn:
+            playerResult = player1.make_move(currentState, currentRemark, time_limit=TIME_PER_MOVE)
+            name = player1.nickname
+            XsTurn = False
+        else:
+            playerResult = player2.make_move(currentState, currentRemark, time_limit=TIME_PER_MOVE)
+            name = player2.nickname
+            XsTurn = True
+        moveAndState, currentRemark = playerResult
+        if moveAndState==None:
+            FINISHED = True; continue
+        move, currentState = moveAndState
+        moveReport = "Move is by "+who+" to "+str(move)
+        renderCommentary(moveReport)
+        utteranceReport = name +' says: '+currentRemark
+        renderCommentary(utteranceReport)
+        if USE_HTML: gameToHTML.reportResult(moveReport)
+        if USE_HTML: gameToHTML.reportResult(utteranceReport)
+        possibleWin = winTesterForK(currentState, move, K)
+        if possibleWin != "No win":
+            FINISHED = True
+            currentState.finished = True
+            printState(currentState)
+            if USE_HTML: gameToHTML.stateToHTML(currentState, finished=True)
+            renderCommentary(possibleWin)
+            if USE_HTML: gameToHTML.reportResult(possibleWin)
+            if USE_HTML: gameToHTML.endHTML()
+            return
+        printState(currentState)
+        if USE_HTML: gameToHTML.stateToHTML(currentState)
+        turnCount += 1
+        if turnCount == TURN_LIMIT: FINISHED=True
+        else:
+            sleep(WAIT_TIME_AFTER_MOVES) # NOT TOO FAST.
+    printState(currentState)
+    if USE_HTML: gameToHTML.stateToHTML(currentState)
+    who = currentState.whose_move
+    renderCommentary("Game over; it's a draw.")
+    if USE_HTML: gameToHTML.reportResult("Game Over; it's a draw")
+    if USE_HTML: gameToHTML.endHTML()
+
+def printState(s):
+    global FINISHED
+    board = s.board
+    who = s.whose_move
+    horizontalBorder = "+"+3*M*"-"+"+"
+    renderCommentary(horizontalBorder)
+    for row in board:
+        line = "|"
+        for item in row:
+            line += " "+item+" "
+        line += "|"
+        renderCommentary(line)
+    renderCommentary(horizontalBorder)
+    if not FINISHED:
+      renderCommentary("It is "+who+"'s turn to move.\n")
+
+# Temporary function.  Remove when other channels are working.
+def renderCommentary(stuff):
+    print(stuff)
+      
+def render_move_and_state(move, state):
+   # NOTE: THIS DEFN WILL BE OVERWRITTEN WHEN USED ON THE WEB.
+   print(move, state)
+
+def render_utterance(who, utterance):
+   # NOTE: THIS DEFN WILL BE OVERWRITTEN WHEN USED ON THE WEB.
+   print(who+' says: '+utterance)
+
+# Not used in offline version:
+#def async_runGame():
+#    fut = ensure_future(runGame())
+
+WAIT_TIME_AFTER_MOVES = 0.01
+def set_wait_time(t):
+    global WAIT_TIME_AFTER_MOVES
+    WAIT_TIME_AFTER_MOVES = float(t)
+     
+def test():
+    # Stand-alone test
+    print("Starting stand-alone test of GameMaster.py")
+    # Edit this to change what version of K-in-a-Row is used.
+    set_game(FIAR) # default is Tic-Tac-Toe
+    #set_game(FIAR) # Five in a Row
+    # Import 1 or 2 agent files here.
+    # If using only 1, create 2 instances of it, one of
+    # which is a "twin".
+
+    #import yourUWNetID_KInARow as h
+    import natevitz_KInARow as h
+    import RandomPlayer as j
+    px = j.OurAgent()
+    po = h.OurAgent()
+    set_players(px, po)
+    print("Players are set.")
+    print("Now let's run the game.")
+    runGame()
+
+
+if __name__ == '__main__':
+    test()
+    
+''' RandomPlayer.py
+A player for the game of K-in-a-Row (on N by M board with forbidden squares.)
+
+'''
+
+from agent_base import KAgent
+import game_types
+from random import randint
+GAME_TYPE = None
+
+class OurAgent(KAgent):
+
+    def __init__(self, twin=False):
+        self.twin = twin
+        self.nickname = 'Randy'
+        if twin: self.nickname = "Randy-Junior"
+        self.long_name = 'Random Walker'
+        if twin: self.long_name = "Random Walker Junior"
+        self.my_past_utterances = None
+        self.opponent_past_utterances = None
+        self.repeat_count = None
+        self.utt_count = None
+        
+    # Receive and acknowledge information about the game from
+    # the game master:
+    def prepare(
+            self,
+            game_type,
+            what_side_to_play,
+            opponent_nickname,
+            expected_time_per_move = 0.1, # Time limits can be
+                                          # changed mid-game by the game master.
+            utterances_matter = True):    # If False, just return 'OK' for each utterance.
+
+
+       # Write code to save the relevant information in variables
+       # local to this instance of the agent.
+       # Game-type info can be in global variables.
+       self.who_i_play = what_side_to_play
+       self.opponent_nickname = opponent_nickname
+       self.time_limit = expected_time_per_move
+       global GAME_TYPE
+       GAME_TYPE = game_type
+       print("Oh, I love playing randomly at ", game_type.long_name)
+       self.my_past_utterances = []
+       self.opponent_past_utterances = []
+       self.repeat_count = 0
+       self.utt_count = 0
+       if self.twin: self.utt_count = 5 # Offset the twin's utterances.
+
+       return "OK"
+
+    def introduce(self):
+        if self.twin:
+            remark = "Call me the Junior Random Walker."
+        else:
+            remark = "My name is "+self.long_name+". Or is it Walky Rander?"
+        return remark
+
+    def nickname(self): return self.nickname
+
+    def make_move(self, state, last_utterance, time_limit):
+        possibleMoves = successors_and_moves(state)
+        myMove = chooseMove(possibleMoves)
+        myUtterance = self.nextUtterance()
+        newState, newMove = myMove
+        return [[newMove, newState], myUtterance]
+
+    def nextUtterance(self):
+        if self.repeat_count > 1: return "I am randomed out now."
+        n = len(UTTERANCE_BANK)
+        if self.utt_count == n:
+            self.utt_count = 0
+            self.repeat_count += 1
+        this_utterance = UTTERANCE_BANK[self.utt_count]
+        self.utt_count += 1
+        return this_utterance
+   
+# OPTIONAL THINGS TO KEEP TRACK OF:
+
+#  WHO_MY_OPPONENT_PLAYS = other(WHO_I_PLAY)
+#  MY_PAST_UTTERANCES = []
+#  OPPONENT_PAST_UTTERANCES = []
+#  UTTERANCE_COUNT = 0
+#  REPEAT_COUNT = 0 or a table of these if you are reusing different utterances
+
+
+# Figure out who the other player is.
+# For example, other("X") = "O".
+def other(p):
+    if p=='X': return 'O'
+    return 'X'
+
+# Randomly choose a move.
+def chooseMove(statesAndMoves):
+    states, moves = statesAndMoves
+    if states==[]: return None
+    random_index = randint(0, len(states)-1)
+    my_choice = [states[random_index], moves[random_index]]
+    return my_choice
+
+# The following is a Python "generator" function that creates an
+# iterator to provide one move and new state at a time.
+# It could be used in a smarter agent to only generate SOME of
+# of the possible moves, especially if an alpha cutoff or beta
+# cutoff determines that no more moves from this state are needed.
+def move_gen(state):
+    b = state.board
+    p = state.whose_move
+    o = other(p)
+    mCols = len(b[0])
+    nRows = len(b)
+
+    for i in range(nRows):
+        for j in range(mCols):
+            if b[i][j] != ' ': continue
+            news = do_move(state, i, j, o)
+            yield [(i, j), news]
+
+# This uses the generator to get all the successors.
+def successors_and_moves(state):
+    moves = []
+    new_states = []
+    for item in move_gen(state):
+        moves.append(item[0])
+        new_states.append(item[1])
+    return [new_states, moves]
+
+# Performa a move to get a new state.
+def do_move(state, i, j, o):
+            news = game_types.State(old=state)
+            news.board[i][j] = state.whose_move
+            news.whose_move = o
+            return news
+    
+UTTERANCE_BANK = ["k",
+                  "l"
+                  ]
+
+
+def test():
+    global GAME_TYPE
+    GAME_TYPE = game_types.TTT
+    print(GAME_TYPE)
+    h = OurAgent()
+    print("I am ", h.nickname)
+    
+    ttt = GAME_TYPE.initial_state
+    print("ttt initial state: ")
+    print(ttt)
+    print("successors_and_moves: ")
+    print(successors_and_moves(ttt))
+
+if __name__=="__main__":
+    test()
+'''
+agent_base.py
+
+Base class to be subclassed to create an agent for playing
+"K-in-a-Row with Forbidden Squares" and related games.
+
+Paul G. Allen School of Computer Science and Engineering,
+University of Washington
+
+THIS IS A TEMPLATE WITH STUBS FOR THE REQUIRED FUNCTIONS.
+
+IMPORT IT INTO YOUR OWN AGENT MODULE AND SUBCLASS KAgent.
+OVERRIDE METHODS AS NEEDED TO CREATE YOUR OWN AGENT.
+
+YOU CAN PUT INTO YOUR MODULE WHATEVER ADDITIONAL FUNCTIONS 
+YOU NEED IN ORDER TO ACHIEVE YOUR AGENT IMPLEMENTATION.
+
+'''
+
+
+AUTHORS = 'Jane Smith and Laura Lee' # Override this in your agent file.
+
+import time
+
+# Base class for all K-in-a-Row agents.
+
+class KAgent:
+
+    def __init__(self, twin=False):
+        self.twin=False
+        self.nickname = 'Nic'
+        if twin: self.nickname += '2'
+        self.long_name = 'Templatus Skeletus'
+        if twin: self.long_name += ' II'
+        self.persona = 'bland'
+        self.voice_info = {'Chrome': 10, 'Firefox': 2, 'other': 0}
+        self.playing = "don't know yet" # e.g., "X" or "O".
+        self.image = None
+        self.alpha_beta_cutoffs_this_turn = -1
+        self.num_static_evals_this_turn = -1
+        self.zobrist_table_num_entries_this_turn = -1
+        self.zobrist_table_num_hits_this_turn = -1
+        self.current_game_type = None
+
+    def introduce(self):
+        intro = '\nMy name is Templatus Skeletus.\n'+\
+            '"An instructor" made me.\n'+\
+            'Somebody please turn me into a real game-playing agent!\n' 
+        return intro
+
+    def nickname(self):
+        return self.nickname
+ 
+    # Receive and acknowledge information about the game from
+    # the game master:
+    def prepare(
+            self,
+            game_type,
+            what_side_to_play,
+            opponent_nickname,
+            expected_time_per_move = 0.1, # Time limits can be
+                                          # changed mid-game by the game master.
+            utterances_matter=True):      # If False, just return 'OK' for each utterance,
+                                          # or something simple and quick to compute
+                                          # and do not import any LLM or special APIs.
+                                          # During the tournament, this will be False..
+       if utterances_matter:
+           pass
+           # Optionally, import your LLM API here.
+           # Then you can use it to help create utterances.
+
+       # Write code to save the relevant information in variables
+       # local to this instance of the agent.
+       # Game-type info can be in global variables.
+       print("Change this to return 'OK' when ready to test the method.")
+       return "Not-OK"
+                
+    def make_move(self, current_state, current_remark, time_limit=1000,
+                  autograding=False, use_alpha_beta=True,
+                  use_zobrist_hashing=False, max_ply=3,
+                  special_static_eval_fn=None):
+        print("make_move has been called")
+
+        print("code to compute a good move should go here.")
+        # Here's a placeholder:
+        a_default_move = (0, 0) # This might be legal ONCE in a game,
+        # if the square is not forbidden or already occupied.
+    
+        new_state = current_state # This is not allowed, and even if
+        # it were allowed, the newState should be a deep COPY of the old.
+    
+        new_remark = "I need to think of something appropriate.\n" +\
+        "Well, I guess I can say that this move is probably illegal."
+
+        print("Returning from make_move")
+        if not autograding:
+            return [[a_default_move, new_state], new_remark]
+        
+
+        stats = [self.alpha_beta_cutoffs_this_turn,
+                 self.num_static_evals_this_turn,
+                 self.zobrist_table_num_entries_this_turn,
+                 self.zobristt_table_num_hits_this_turn]
+        
+
+        return [[a_default_move, new_state]+stats, new_remark]
+
+    # The main adversarial search function:
+    def minimax(
+            self,
+            state,
+            depth_remaining,
+            pruning=False,
+            alpha=None,
+            beta=None):
+        print("Calling minimax. We need to implement its body.")
+
+        default_score = 0 # Value of the passed-in state. Needs to be computed.
+    
+        return [default_score, "my own optional stuff", "more of my stuff"]
+        # Only the score is required here but other stuff can be returned
+        # in the list, after the score, in case you want to pass info
+        # back from recursive calls that might be used in your utterances,
+        # etc. 
+ 
+    def static_eval(self, state, game_type=None):
+        print('calling static_eval. Its value needs to be computed!')
+        # Values should be higher when the states are better for X,
+        # lower when better for O.
+        return 0
+ 
+
+GAME_TYPE = None  # not known yet.
+''' autograder.py
+A simple tester for K-in-a-Row agents. Intended as a debugging aid.
+
+We assume the program being tested here ALREADY CAN PLAY
+ALL TYPES OF K-IN-A-ROW GAMES WITH THE Game_Master_Offline.py
+program.
+
+Therefore, the tests here will be additional tests for
+specific aspects of the agent's capabilities.
+
+Version of Feb. 5, 2025
+
+ tests:
+
+1. Static eval  (worth 10 points)
+2. Minimax
+  2a. Straight minimax (worth 10 points)
+  2b. Alpha-beta (worth 10 points)
+
+Passing these tests does NOT mean that the agent is
+necessarily complying with all assignment requirements.
+
+Also, eligibility for the class tournament may be
+determined using additional factors, such as what libaries
+might be imported, timing behavior, etc.
+
+To use this, change "YourUWNetID_KInARow to your actual agent file's
+name, make sure you have the imported files in the same folder.
+(These include both the ones your agent imports and the ones imported
+by this autograder.)
+Then run the command:
+
+python autograder.py
+  or on some systems:
+python3 autograder.py
+
+'''
+
+import game_types
+import natevitz_KInARow as agent_module
+import spec_static_by_table
+
+
+def test_static_eval(agent):
+    '''A static evaluation function should return high values
+    on states that are good for X, and similarly strong but
+    negative values on states that are good for O.
+    Furthermore values should roughly track HOW good a
+    state is for either player, and a state that's equally
+    good for X and O should return a value of 0 or close to 0.
+
+    The function should be robust to variations in the game
+    type (i.e., initial state) and be able to work OK on
+    whatever game states are presented to it, e.g., Tic-Tac-Toe,
+    Cassini, etc. 
+
+    Part 1: Tic-Tac-Toe
+      State A:  win for O
+      State B:  good for O
+      State C:  neutral
+      State D:  good for X
+      State E:  win for X
+
+    Part 2: Cassini
+      State F:  win for O
+      State G:  good for O
+      State H:  neutral
+      State I:  good for X
+      State J:  win for X
+
+'''
+
+    Part_1_scores = [agent.static_eval(s, game_types.TTT) for s in [A, B, C, D, E]]
+    num_inversions1 = count_inversions(Part_1_scores)
+
+    #Part_2_scores = [0,0,0,0,0]
+    Part_2_scores = [agent.static_eval(s, game_types.Cassini) for s in [F, G, H, I, J]]
+    num_inversions2 = count_inversions(Part_2_scores)
+
+    meta_score = (20 - (num_inversions1 + num_inversions2)) / 2
+    print("Your static_eval function gets ", meta_score, "out of 10.")
+
+    return meta_score
+
+def count_inversions(lst):
+    n = len(lst)
+    if n < 2: return 0
+
+    # "Naive method" using nested loops; O(n^2) but code is simple
+    # and we will have n = 5.  (Alternative uses modified Merge Sort and
+    # needs 3 times as much code to achieve O(n log2 n) complexity.
+    c = 0
+    for i in range(n-1):
+        for j in range(i+1, n):
+            if lst[i] >= lst[j]: c += 1
+    return c
+
+A = game_types.State(initial_state_data = \
+    [[['X',' ','O'],
+      [' ','O','X'],
+      ['O',' ','X']], "X"])
+
+B = game_types.State(initial_state_data = \
+    [[['X',' ','O'],
+      ['X',' ',' '],
+      ['O','X',' ']], "O"])
+
+C = game_types.State(initial_state_data = \
+    [[['X',' ','O'],
+      [' ',' ',' '],
+      [' ',' ',' ']], "X"])
+
+D = game_types.State(initial_state_data = \
+    [[['O','X','X'],
+      [' ',' ','O'],
+      ['X','O',' ']], "X"])
+
+E = game_types.State(initial_state_data = \
+    [[['X','O','O'],
+      ['X',' ','X'],
+      ['X',' ','O']], "O"])
+
+F = game_types.State(initial_state_data = \
+    [[[' ',' ',' ',' ',' ',' ',' ','X'],
+      [' ','O','O','O','O','O',' ',' '],
+      [' ',' ',' ','-','-',' ',' ',' '],
+      [' ',' ','-','-','-','-','X','X'],
+      [' ',' ',' ','-','-',' ',' ',' '],
+      [' ','X','X',' ',' ',' ',' ',' '],
+      [' ',' ',' ',' ',' ',' ','O',' ']], "X"])
+
+G = game_types.State(initial_state_data = \
+    [[[' ',' ',' ',' ',' ',' ',' ','X'],
+      [' ','O','O',' ','O','O',' ',' '],
+      [' ','O',' ','-','-',' ',' ',' '],
+      [' ',' ','-','-','-','-','X','X'],
+      [' ',' ',' ','-','-',' ',' ',' '],
+      [' ','X','X',' ',' ',' ',' ',' '],
+      [' ',' ',' ',' ',' ','O','O',' ']], "X"])
+
+H = game_types.State(initial_state_data = \
+    [[[' ',' ',' ',' ',' ',' ',' ',' '],
+      [' ','O',' ',' ',' ',' ','O','X'],
+      [' ',' ',' ','-','-',' ',' ',' '],
+      [' ',' ','-','-','-','-',' ',' '],
+      [' ',' ',' ','-','-',' ',' ',' '],
+      [' ','X',' ',' ',' ',' ','X',' '],
+      ['O',' ',' ',' ',' ',' ','O',' ']], "O"])
+
+I = game_types.State(initial_state_data = \
+    [[[' ',' ',' ','O',' ',' ',' ','X'],
+      [' ','O',' ',' ',' ','O','O','X'],
+      ['O',' ',' ','-','-','O',' ','X'],
+      [' ',' ','-','-','-','-','X',' '],
+      [' ',' ',' ','-','-','X',' ',' '],
+      [' ','X','X',' ',' ',' ',' ',' '],
+      [' ',' ','O',' ',' ',' ','O',' ']], "X"])
+
+J = game_types.State(initial_state_data = \
+    [[[' ','O',' ',' ',' ',' ',' ','O'],
+      [' ','O',' ',' ',' ',' ',' ','O'],
+      [' ','O',' ','-','-',' ',' ',' '],
+      [' ',' ','-','-','-','-','X','O'],
+      [' ',' ',' ','-','-',' ',' ',' '],
+      [' ','X','X','X','X','X',' ',' '],
+      [' ',' ',' ',' ',' ',' ','O',' ']], "O"])
+
+MM_TEST_STATE = game_types.State(initial_state_data = \
+    [[['O','O','X'],
+      ['X',' ',' '],
+      [' ',' ','X']], "O"])
+                                
+def test_minimax(agent, use_alpha_beta=False):
+    '''Autograde the minimax capability of the agent as follows.
+    Call the agent's prepare method, in case it needs to
+    do any initialization prior to making moves.
+    Call its make_move function with:
+      autograding=True
+      use_alpha_beta=Fase
+      special_static_eval_fn = TTT_static_eval.
+      This method will count the number of times it has been
+      called and store it in NUM_CALLS_TO_STATIC_EVAL.
+      It should also return best move and new state;
+      hopefully the backed-up value of the new state, too.
+'''
+    spec_static_by_table.STATIC_EVAL_COUNT = 0
+    GAME_TYPE = game_types.TTT
+    prep_response = agent.prepare(GAME_TYPE, 'X', "Op Ponent")
+    if prep_response != 'OK':
+        print("Agent did not respond properly to the prepare command.")
+        return
+    print("Prepare was successful, it seems.")
+    print("Next ... let's test minimaxing (and possibly alpha-beta pruning).")
+    opponent_remark = "Do your thing."
+    response = agent.make_move(\
+                MM_TEST_STATE,
+                opponent_remark,
+                autograding=True,
+                use_alpha_beta=use_alpha_beta,
+                use_zobrist_hashing=False,
+                max_ply=2,
+                special_static_eval_fn=spec_static_by_table.special_static_eval_fn)
+
+    print("Agent ", agent.nickname, " gives the following make_move response:")
+    print(response)
+    se_count = spec_static_by_table.STATIC_EVAL_COUNT
+    print(se_count, "calls made to the special static evaluation function.")
+    best_move = response[0][0]
+    if best_move==(1,2):
+        meta_minimax_score = 5
+    else:
+        print("minimax did NOT find the correct move")
+        meta_minimax_score = 0
+    if use_alpha_beta:
+        if se_count == 8:
+            meta_minimax_score += 5
+        else:
+            print(se_count, "is the wrong number of leaves evaluated during alpha-beta.")
+            print("The correct number is 8.")
+    
+    if not use_alpha_beta and se_count == 12:
+        meta_minimax_score += 5
+    else:
+        print("Without alpha-beta, your search should evaluate 12 leaf nodes.")
+        print("Your search did", se_count)
+    return meta_minimax_score        
+    
+if __name__ == "__main__":
+
+    agent = agent_module.OurAgent()
+    meta_se_score = test_static_eval(agent)
+    print("The static_evaluation function's meta-score for ",
+          agent.nickname, " is", meta_se_score)
+
+    meta_minimax_score = test_minimax(agent)
+    if meta_minimax_score==10:
+        print("Your agent PASSES the minimax test!")
+    meta_alpha_beta_score = test_minimax(agent, use_alpha_beta=True)
+    if meta_alpha_beta_score==10:
+        print("Your agent PASSES the alpha-beta test!")
+    total_autograder_score = meta_se_score + meta_minimax_score + meta_alpha_beta_score    
+    print("Your agent's total autograded score is ", total_autograder_score, "out of 30.0.") 
+'''gameToHTML.py
+
+'''
+f = None
+def startHTML(nickName1, nickName2, gameType, round=1):
+    # Create a filename.
+    fn = clean(nickName1)+'-vs-'+clean(nickName2)+'-in-'+clean(gameType)+'-round-'+str(round)+'.html'
+    # To be added: Check for existing file by this name and create a new variation of it.
+    global F
+    try: F = open(fn, "w");
+    except:
+        print("Could not open the file "+fn+" for the game's HTML page.")
+        return
+    F.write('''
+<html><head><title>K-in-a-Row game</title></head>
+<body>
+<h1>Game Report: ''')
+    F.write(nickName1 + ' versus ' + nickName2 + ' in ' +gameType + ', round '+str(round))
+
+    F.write(''' </h1>
+''')
+
+def reportResult(result):
+    F.write("<h2>"+result+"</h2>\n")
+
+def endHTML():
+    F.write("</body></html>\n")
+    F.close()
+
+    
+def clean(name):
+    import re
+    #print("in clean, name is", name)
+    new_name = re.sub(' ', '-', name)
+    new_name = re.sub('[^a-zA-Z10-9\\-]', '', new_name)
+    return new_name
+
+def stateToHTML(state, finished=False):
+    board = state.board
+    who = state.whose_move
+    html = '''<table>
+'''
+    for row in board:
+        html += "<tr>"
+        for col in row:
+            img = "gray32.png"
+            if col=='X': img = "X32.png"
+            elif col=='O': img = "O32.png"
+            elif col=="-": img = "black32.png"
+            html += "<td><img src=" + img + "></td>"
+        html += "</tr>\n"
+    html += "</table><br>\n"
+    if not finished: html += "<h3>"+who+" to move.</h3>\n"
+    F.write(html)
+    
+'''game_types.py
+
+Defines a State class useful in all K-in-a-Row games.
+
+Defines a KGame class as a base class for these games.
+
+Also defines 3 specific versions of K-in-a-Row.
+'''
+
+#GAME_TYPE = None # Used in State.__str__
+
+class State:
+    def __init__(self, old=None, initial_state_data=None):
+        if old==None:
+            if initial_state_data==None:
+                print("No old state or initial state data given to State().")
+                raise Exception("in game_types.py, State() needs args.")
+            else:
+                # Translate string into initial state.
+                self.board = initial_state_data[0]
+                self.whose_move = initial_state_data[1]
+        else:
+            self.board = deep_copy(old.board)
+            self.whose_move = old.whose_move # Changing whose move not done here.
+        self.finished = False # Set to True if a win is detected.
+        
+    def __str__(self):
+        text = ''
+        M = len(self.board[0])
+        horizontalBorder = "+"+3*M*"-"+"+\n"
+        text += horizontalBorder
+        for row in self.board:
+            line = "|"
+            for item in row:
+                if item==' ': item = "."
+                line += " "+item+" "
+            line += "|\n"
+            text += line
+        text += horizontalBorder
+        if not self.finished:
+            text += "It is "+self.whose_move+"'s turn to move.\n"
+        return text
+
+            
+    def change_turn(self):
+        # Modify whose turn it is, in this state.
+        if self.whose_move=="X": self.whose_move="O"
+        else: self.whose_move="X"
+
+def deep_copy(board_data):
+    return [row[:] for row in board_data]
+
+class Game_Type:
+    def __init__(self, long_name, short_name, k, n, m, initial_state_data, turn_limit, default_time_per_move):
+        self.long_name = long_name
+        self.short_name = short_name
+        self.k = k
+        self.n = n
+        self.m = m
+        self.initial_state = State(initial_state_data = initial_state_data)
+        self.turn_limit = turn_limit
+        self.default_time_per_move = default_time_per_move
+
+    def __str__(self):
+        text = ''
+        text += self.short_name + " is a Game_Type with k = "+str(self.k)
+        return text
+        
+TTT_INITIAL_STATE_DATA = \
+              [[[' ',' ',' '],
+                [' ',' ',' '],
+                [' ',' ',' ']], "X"]
+
+TTT = Game_Type("Tic-Tac-Toe",
+                 "TTT",
+                 3,
+                 3,
+                 3,
+                 TTT_INITIAL_STATE_DATA,
+                 9,
+                 1)
+
+FIVE_INITIAL_STATE_DATA = \
+              [[['-',' ',' ',' ',' ',' ','-'],
+                [' ',' ',' ',' ',' ',' ',' '],
+                [' ',' ',' ',' ',' ',' ',' '],
+                [' ',' ',' ',' ',' ',' ',' '],
+                [' ',' ',' ',' ',' ',' ',' '],
+                [' ',' ',' ',' ',' ',' ',' '],
+                ['-',' ',' ',' ',' ',' ','-']], "X"]
+
+FIAR = Game_Type("Five-in-a-Row on a Seven-by-Seven Board with Corners Forbidden",
+                 "5-in-a-Row",
+                 5,
+                 7,
+                 7,
+                 FIVE_INITIAL_STATE_DATA,
+                 45,
+                 0.25)
+
+CASSINI_INITIAL_STATE_DATA = \
+              [[[' ',' ',' ',' ',' ',' ',' ',' '],
+                [' ','O',' ',' ',' ',' ',' ',' '],
+                [' ',' ',' ','-','-',' ',' ',' '],
+                [' ',' ','-','-','-','-',' ',' '],
+                [' ',' ',' ','-','-',' ',' ',' '],
+                [' ',' ',' ',' ',' ',' ',' ',' '],
+                [' ',' ',' ',' ',' ',' ','O',' ']], "X"]
+
+Cassini = Game_Type("Cassini (5 in a row that does not hit Saturn)",
+                    "Cassini",
+                    5,
+                    7,
+                    8,
+                    CASSINI_INITIAL_STATE_DATA,
+                    44,
+                    1)
+
+def test():
+    global GAME_TYPE
+    GAME_TYPE = Cassini
+    print(GAME_TYPE.initial_state)
+
+if __name__ == "__main__":
+    test()
+    
+'''
+natevitz_KInARow.py
+Authors: Vitzthum, Nathan; Liu, Grace
+
+An agent for playing "K-in-a-Row with Forbidden Squares" and related games.
+CSE 415, University of Washington
+
+THIS IS A TEMPLATE WITH STUBS FOR THE REQUIRED FUNCTIONS.
+YOU CAN ADD WHATEVER ADDITIONAL FUNCTIONS YOU NEED IN ORDER
+TO PROVIDE A GOOD STRUCTURE FOR YOUR IMPLEMENTATION.
+
+'''
+
+from agent_base import KAgent
+from game_types import State, Game_Type
+
+AUTHORS = 'Nathan Vitzthum and Grace Liu' 
+ 
+import time # You'll probably need this to avoid losing a
+ # game due to exceeding a time limit.
+import random
+
+# Create your own type of agent by subclassing KAgent:
+
+class OurAgent(KAgent):  # Keep the class name "OurAgent" so a game master
+    # knows how to instantiate your agent class.
+
+    def __init__(self, twin=False):
+        self.twin=twin
+        self.nickname = 'Gerry'
+        if twin: self.nickname += 'Flo'
+        self.long_name = 'Gerald Flortinstein'
+        if twin: self.long_name += ' Flora Flortinstein'
+        self.persona = 'Provocative'
+        self.voice_info = {'Chrome': 10, 'Firefox': 2, 'other': 0}
+        self.playing = "don't know yet" # e.g., "X" or "O".
+        self.alpha_beta_cutoffs_this_turn = 0
+        self.num_static_evals_this_turn = 0
+        self.zobrist_table_num_entries_this_turn = 0
+        self.zobrist_table_num_hits_this_turn = 0
+        self.current_game_type = None
+        self.game_history = []  # List of State objects
+        self.my_utterances = []  # List of strings
+        self.opponent_utterances = []  # List of strings
+
+    def introduce(self):
+        intro = '\nMy name is Gerald Flortinstein.\n'+\
+            '"Nathan and Grace" made me.\n'+\
+            'I\'m ready to kick some tic-tac-toe butt!\n'
+        if self.twin: intro += 'Hi I\'m Flo, I\'m the TWIN.\n'+\
+                                ' I hope you have a great game!\n'
+        return intro
+
+    # Receive and acknowledge information about the game from
+    # the game master:
+    def prepare(self, game_type, what_side_to_play, opponent_nickname, 
+                expected_time_per_move = 0.1, utterances_matter=True):      
+        # If False, just return 'OK' for each utterance,
+        # or something simple and quick to compute
+        # and do not import any LLM or special APIs.
+        # During the tournament, this will be False..
+
+        if utterances_matter:
+           pass
+           # Optionally, import your LLM API here.
+           # Then you can use it to help create utterances.
+
+        self.current_game_type = game_type
+        self.playing = what_side_to_play
+        self.opponent = opponent_nickname
+        self.time_limit = expected_time_per_move
+        return "OK"     
+   
+    # The core of your agent's ability should be implemented here:             
+    def make_move(self, current_state, current_remark, time_limit=1.0,
+                  autograding=False, use_alpha_beta=True,
+                  use_zobrist_hashing=False, max_ply=3,
+                  special_static_eval_fn=None, order_moves=False):
+        print("make_move has been called")
+
+        self.alpha_beta_cutoffs_this_turn = 0
+        self.num_static_evals_this_turn = 0
+
+        start_time = time.time()
+        best_move, _ = self.minimax(current_state, max_ply, pruning=use_alpha_beta, 
+                                    alpha=float('-inf'), beta=float('inf'), 
+                                    start_time=start_time, time_limit=time_limit,
+                                    special_static_eval_fn=special_static_eval_fn, order_moves=order_moves)
+
+        end_time = time.time()
+        new_state = self.perform_move(current_state, best_move)
+        # ADDED: Store the current state to game history
+        self.game_history.append(current_state)
+        self.game_history[-1].move_made = best_move
+
+        # Store the stats from this move
+        self.last_move_stats = {
+            'time_taken': end_time - start_time,
+            'static_evals': self.num_static_evals_this_turn,
+            'alpha_beta_cutoffs': self.alpha_beta_cutoffs_this_turn,
+            'zobrist_entries': self.zobrist_table_num_entries_this_turn,
+            'zobrist_hits': self.zobrist_table_num_hits_this_turn
+        }
+
+        new_remark = self.select_utterance(current_state, best_move)
+
+        # ADDED:  Check if the opponent asked for a game summary
+        if current_remark == "What's your take on the game so far?":
+            new_remark = self.generate_game_summary() # create the game summary
+
+        # ADDED:  Check if the opponent asked for an explanation
+        if current_remark == "Tell me how you did that":
+            new_remark = self.explain_last_move() # create the explanation
+
+        # need to use special evaluation function if autograding is true
+        if autograding:
+            stats = [self.alpha_beta_cutoffs_this_turn,
+                     self.num_static_evals_this_turn,
+                     self.zobrist_table_num_entries_this_turn,
+                     self.zobrist_table_num_hits_this_turn]
+            return [[best_move, new_state] + stats, new_remark]
+        else:
+            return [[best_move, new_state], new_remark]
+        
+
+    def select_utterance(self, current_state, best_move):
+        """Selects an utterance based on the game state."""
+        score = self.static_eval(current_state, self.current_game_type)
+
+        if (self.twin):
+            # Winning utterances
+            if (score > (self.current_game_type.k * 20) and self.playing == 'X') or (score < (-20 * self.current_game_type.k) and self.playing == 'O'): #Tuned
+                utterances = [
+                    "I believe in you",
+                    "Don't beat yourself up",
+                    "There's always next game :)",
+                ]
+            #Losing utterances
+            elif (score < (-20 * self.current_game_type.k) and self.playing == 'X') or (score > (20 * self.current_game_type.k) and self.playing == 'O'): #Tuned
+                utterances = [
+                    "Wow you're so good",
+                    "I need to take notes on your strategy",
+                    "Maybe I should just give up.",
+                ]
+            else:
+                utterances = [
+                    "Interesting...",
+                    "I'm considering my options.",
+                    "Here's my move.",
+                ]
+        else:
+            # Winning utterances
+            if (score > (self.current_game_type.k * 20) and self.playing == 'X') or (score < (-20 * self.current_game_type.k) and self.playing == 'O'): #Tuned
+                utterances = [
+                    "I'm crushing you!",
+                    "This is too easy.",
+                    "Do you even know how to play?",
+                    "Here's some tissues",
+                    "Sorry not all of us can be good at this game"
+                ]
+            #Losing utterances
+            elif (score < (-20 * self.current_game_type.k) and self.playing == 'X') or (score > (20 * self.current_game_type.k) and self.playing == 'O'): #Tuned
+                utterances = [
+                    "I'm just giving you a chance",
+                    "Are you using an AI?",
+                    "Must be beginner's luck",
+                    "Just wait until I start trying"
+                ]
+            else:
+                utterances = [
+                    "This game is putting me to sleep",
+                    "Do something cool for once",
+                    "Give me a challenge",
+                ]
+        return random.choice(utterances)
+        
+    def explain_last_move(self):
+        """Generates a detailed explanation of the last move."""
+        if not self.last_move_stats:
+            return "I'm sorry, I don't have information about the last move yet."
+
+        stats = self.last_move_stats
+        explanation = (
+            "Okay, here's how I came up with that move:\n"
+            f"I spent {stats['time_taken']:.4f} seconds thinking about it.\n"
+            f"During that time, I evaluated {stats['static_evals']} board states using my static evaluation function.\n"
+            f"I also performed {stats['alpha_beta_cutoffs']} alpha-beta cutoffs, which helped me prune the search space.\n"
+        )
+
+        if stats['zobrist_entries'] > 0:
+            explanation += (
+                f"My Zobrist hashing table had {stats['zobrist_entries']} entries, and I had {stats['zobrist_hits']} hits, which sped up the search.\n"
+            )
+        else:
+            explanation += "I didn't use Zobrist hashing for this move.\n"
+
+        explanation += "I used a minimax search with a depth of 3." #Hardcoded depth
+
+        return explanation
+
+
+    def generate_game_summary(self):
+        """Generates a story of the game so far, including a prediction."""
+        story = "So far, the game has been quite interesting. From the beginning, "
+        
+        # Build the story from the game history
+        for i, state in enumerate(self.game_history):
+            move = state.move_made
+            player = 'X' if i % 2 == 0 else 'O' #X always goes first
+            if move:
+                story += f"Player {player} played at position {move}, "
+            else:
+                story += "The game began, "
+        
+        story += "leading to the current board state. "
+        
+        # Make a prediction about who will win (using static evaluation)
+        current_state = self.game_history[-1] #The most recent state
+        score = self.static_eval(current_state, self.current_game_type)
+        
+        if score > 100:  #Heuristic threshold for winning
+            story += f"Based on my analysis, I predict that {self.playing} is likely to win."
+        elif score < -100:
+            opponent = 'O' if self.playing == 'X' else 'X'
+            story += f"Based on my analysis, I predict that {opponent} is likely to win."
+        else:
+            story += "The game seems to be heading towards a draw."
+        
+        return story
+
+
+    def minimax(self, state, depth_remaining, pruning=False,
+            alpha=float('-inf'), beta=float('inf'),
+            start_time=None, time_limit=None,
+            order_moves=False, special_static_eval_fn=None):
+        if time.time() - start_time > (time_limit * 0.9):
+            return None, float('-inf')
+
+        if depth_remaining == 0 or self.is_terminal(state):
+            if special_static_eval_fn:
+                score = special_static_eval_fn(state)
+            else:
+                self.num_static_evals_this_turn += 1
+                score = self.static_eval(state, self.current_game_type)
+            return None, score
+
+        moves = self.get_legal_moves(state)
+        if not moves:
+            if special_static_eval_fn:
+                score = special_static_eval_fn(state)
+            else:
+                self.num_static_evals_this_turn += 1
+                score = self.static_eval(state, self.current_game_type)
+            return None, score
+
+        # Apply move ordering
+        if order_moves:
+            ordered_moves = self.order_moves(state, moves)
+        else: 
+            ordered_moves = moves
+
+        if state.whose_move == 'X':
+            best_score = float('-inf')
+            best_move = None
+            for move in ordered_moves:
+                new_state = self.perform_move(state, move)
+                _, score = self.minimax(new_state, depth_remaining - 1, pruning, alpha, beta, start_time, time_limit, special_static_eval_fn, order_moves)
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+                if pruning:
+                    alpha = max(alpha, best_score)
+                    if beta <= alpha:
+                        self.alpha_beta_cutoffs_this_turn += 1
+                        break
+            return best_move, best_score
+        else:
+            best_score = float('inf')
+            best_move = None
+            for move in ordered_moves:
+                new_state = self.perform_move(state, move)
+                _, score = self.minimax(new_state, depth_remaining - 1, pruning, alpha, beta, start_time, time_limit, special_static_eval_fn, order_moves)
+                if score < best_score:
+                    best_score = score
+                    best_move = move
+                if pruning:
+                    beta = min(beta, best_score)
+                    if beta <= alpha:
+                        self.alpha_beta_cutoffs_this_turn += 1
+                        break
+        return best_move, best_score
+
+
+    def static_eval(self, state, game_type):
+        self.num_static_evals_this_turn += 1
+        
+        def evaluate_line(line):
+            def score_player(player):
+                unblocked = self.count_unblocked_sequence(player, line, game_type.k)
+                return unblocked * (10 ** unblocked)
+            return score_player('X') - score_player('O')
+
+        return sum(evaluate_line(line) for line in self.extract_all_lines(state.board, game_type.k))
+
+    def count_unblocked_sequence(self, player, sequence, k):
+        max_unblocked = current_unblocked = open_spaces = 0
+        
+        for cell in sequence + [None]:  # Add sentinel value to handle end of sequence
+            if cell == player:
+                current_unblocked += 1
+                open_spaces += 1
+            elif cell == " ":
+                open_spaces += 1
+            else:
+                if open_spaces >= k:
+                    max_unblocked = max(max_unblocked, current_unblocked)
+                current_unblocked = open_spaces = 0
+        
+        return max_unblocked
+
+    def extract_all_lines(self, board, k):
+        rows, cols = len(board), len(board[0])
+        
+        def get_diagonals(reverse=False):
+            diags = []
+            for offset in range(-rows + 1, cols):
+                diag = [board[i][i + offset] if reverse else board[i][cols - 1 - i - offset] 
+                        for i in range(max(0, -offset), min(rows, cols - offset))]
+                if len(diag) >= k:
+                    diags.append(diag)
+            return diags
+
+        return (
+            board +  # rows
+            list(map(list, zip(*board))) +  # columns
+            get_diagonals() +  # forward diagonals
+            get_diagonals(reverse=True)  # backward diagonals
+        )
+
+
+    def get_legal_moves(self, state):
+        moves = []
+        board = state.board
+        for i in range(len(board)):
+            for j in range(len(board[i])):
+                if board[i][j] == ' ':
+                    moves.append((i, j))
+        return moves
+
+    def perform_move(self, state, move):
+        new_state = State(old=state)
+        new_state.board[move[0]][move[1]] = state.whose_move
+        new_state.whose_move = 'O' if state.whose_move == 'X' else 'X'
+        return new_state
+
+    def is_terminal(self, state):
+        board = state.board
+        size = len(board)
+
+        # Check rows and columns
+        for i in range(size):
+            if self.check_line(board[i]):  # Rows
+                return True
+            if self.check_line([board[j][i] for j in range(size)]):  # Columns
+                return True
+
+        # Check diagonals
+        if self.check_line([board[i][i] for i in range(size)]):  # Top-left to bottom-right
+            return True
+        if self.check_line([board[i][size - 1 - i] for i in range(size)]):  # Top-right to bottom-left
+            return True
+
+        # Check for draw (no empty spaces)
+        for row in board:
+            if ' ' in row:
+                return False  # Game is not a draw
+
+        return True  # It's a draw
+
+    def check_line(self, line):
+        return (line[0] != ' ' and len(set(line)) == 1)
+    
+    def order_moves(self, state, moves):
+        move_scores = []
+        for move in moves:
+            new_state = self.perform_move(state, move)
+            score = self.static_eval(new_state, self.current_game_type)
+            move_scores.append((move, score))
+
+        # Sort moves based on the score
+        if self.playing == 'X':  # Maximizing player
+            return [move for move, _ in sorted(move_scores, key=lambda x: x[1], reverse=True)]
+        else:  # Minimizing player
+            return [move for move, _ in sorted(move_scores, key=lambda x: x[1])]
+
+    
+    def measure_minimax_performance(self, state, depth, time_limit=1.0):
+        results = {}
+
+        # Without Move Ordering
+        self.num_static_evals_this_turn = 0
+        self.alpha_beta_cutoffs_this_turn = 0
+        start_time = time.time()
+        self.minimax(state, depth, pruning=True, alpha=float('-inf'), beta=float('inf'), 
+                    start_time=start_time, time_limit=time_limit, order_moves=False)
+        results['Without Ordering - Time'] = time.time() - start_time
+        results['Without Ordering - Static Evals'] = self.num_static_evals_this_turn
+        results['Without Ordering - AB Cutoffs'] = self.alpha_beta_cutoffs_this_turn
+
+        # With Move Ordering
+        self.num_static_evals_this_turn = 0
+        self.alpha_beta_cutoffs_this_turn = 0
+        start_time = time.time()
+        self.minimax(state, depth, pruning=True, alpha=float('-inf'), beta=float('inf'), 
+                    start_time=start_time, time_limit=time_limit, order_moves=False)
+        results['With Ordering - Time'] = time.time() - start_time
+        results['With Ordering - Static Evals'] = self.num_static_evals_this_turn
+        results['With Ordering - AB Cutoffs'] = self.alpha_beta_cutoffs_this_turn
+
+        return results
+'''
+<yourUWNetI>_KInARow.py
+Authors: <Grassy, Dane; Sultana, Soha>
+
+
+An agent for playing "K-in-a-Row with Forbidden Squares" and related games.
+CSE 415, University of Washington
+
+THIS IS A TEMPLATE WITH STUBS FOR THE REQUIRED FUNCTIONS.
+YOU CAN ADD WHATEVER ADDITIONAL FUNCTIONS YOU NEED IN ORDER
+TO PROVIDE A GOOD STRUCTURE FOR YOUR IMPLEMENTATION.
+
+'''
+
+from agent_base import KAgent
+from game_types import State, Game_Type 
+import spec_static_by_table
+#from google import genai
+
+
+AUTHORS = 'Dane Grassy and Soha Sultana' 
+
+import time # You'll probably need this to avoid losing a
+ # game due to exceeding a time limit.
+import random 
+
+# Create your own type of agent by subclassing KAgent:
+
+class OurAgent(KAgent):  # Keep the class name "OurAgent" so a game master
+    # knows how to instantiate your agent class.
+
+    def __init__(self, twin=False):
+        self.twin=twin
+        self.nickname = 'Arro'
+        if twin: self.nickname += '2'
+        self.long_name = 'Templatus Skeletus'
+        if twin: self.long_name += ' II'
+        self.persona = 'bland'
+        self.voice_info = {'Chrome': 10, 'Firefox': 2, 'other': 0}
+        self.playing = "don't know yet" # e.g., "X" or "O".
+        self.alpha_beta_cutoffs_this_turn = -1
+        self.num_static_evals_this_turn = -1
+        self.zobrist_table_num_entries_this_turn = -1
+        self.zobrist_table_num_hits_this_turn = -1
+        self.current_game_type = None
+        self.k = None
+        self.own_utterances = []
+        self.opp_utterances = []
+        self.client = None
+        self.utter = False
+        self.turns = 0
+        self.special = False
+        self.autograding = True
+        self.curr_static = 0
+        self.curr_ab = 0
+
+    def introduce(self):
+        intro = '\nMy name is Arrogant Agent.\n'+\
+            '"Soha Sultana and Dane Grassy" made me.\n'+\
+            'I am going to win all the games!!\n'
+        if self.twin: intro += "By the way, I'm the TWIN.\n"
+        return intro
+
+    # Receive and acknowledge information about the game from
+    # the game master:
+    def prepare(
+        self,
+        game_type,
+        what_side_to_play,
+        opponent_nickname,
+        expected_time_per_move = 0.1, # Time limits can be
+                                      # changed mid-game by the game master.
+
+        utterances_matter = True):      # If False, just return 'OK' for each utterance,
+                                      # or something simple and quick to compute
+                                      # and do not import any LLM or special APIs.
+                                      # During the tournament, this will be False..
+       if utterances_matter:
+            pass
+
+           
+       # Write code to save the relevant information in variables
+       # local to this instance of the agent.
+       # Game-type info can be in global variables.
+       self.current_game_type = game_type
+       self.playing = what_side_to_play
+       self.opponent = opponent_nickname
+       self.max_time = expected_time_per_move
+       self.k = game_type.k
+       
+       # print("Change this to return 'OK' when ready to test the method.")
+       return "OK"
+   
+    # The core of your agent's ability should be implemented here:             
+    def make_move(self, current_state, current_remark, time_limit=1000,
+                  autograding=True, use_alpha_beta=True,
+                  use_zobrist_hashing=False, max_ply=3,
+                  special_static_eval_fn=False):
+        # print("make_move has been called")
+        self.opp_utterances.append(current_remark)
+
+        # print("code to compute a good move should go here.")
+        start_time = time.time()
+        moves = self.get_moves(current_state)
+
+        if not moves:
+            return[[None, current_state], "no moves available"]
+        if special_static_eval_fn:
+            self.special = True
+        if autograding:
+            moves.sort()
+            self.autograding = True
+        
+
+        if current_state.whose_move == 'X':
+            best_score = float('-Inf')
+        else:
+            best_score = float('Inf')
+
+        for curr_move in moves:
+            new_state = self.apply_action(current_state, curr_move)
+            
+            if current_state.whose_move == 'X':
+                alpha = self.minimax(new_state, max_ply - 1, use_alpha_beta, best_score, float('Inf'))
+                if (alpha[0] > best_score):
+                    move = curr_move
+                    best_score = alpha[0]
+            else:
+                beta = self.minimax(new_state, max_ply - 1, use_alpha_beta, float('-Inf'), best_score)
+                if (beta[0] < best_score):
+                    move = curr_move
+                    best_score = beta[0]
+                
+            
+            
+            if time.time() - start_time >= time_limit:
+                print("time limit")
+                break
+        
+        if move is None:
+            move = random.choice(moves)
+
+        current_remark = "Ok"
+        new_state = self.apply_action(current_state, move)
+        if self.utter:
+            #current_remark = self.ai_utter(new_state)
+            self.turns += 1
+        self.curr_ab = 0
+        self.curr_static  = 0
+        return [[move, new_state], current_remark]
+
+    def ai_utter(self, state):
+        board = state.board
+        if self.turns == 0:
+            response = self.client.models.generate_content(
+            model="gemini-2.0-flash", contents=f"Act like an arrogant {self.k} in a row tic tac toe player who " + 
+                f"played their first move as {self.playing} {board} against someone called {self.opponent}, and is a fan of the Seattle Mariners Keep responses short")
+            self.own_utterances.append(response.text)
+            return(response.text)
+        elif(self.opp_utterances[-1] == "What's your take on the game so far?"):
+            response = self.client.models.generate_content(
+            model="gemini-2.0-flash", contents=f"Act like an arrogant {self.k} in a row tic tac toe player who is playing {self.playing}" + 
+                f"was just asked by {self.opponent} what they think of the game. {board} "+
+                f"use the past things the opponent said, {self.opp_utterances} and the things you said {self.own_utterances} " +
+                f"summarize what has happened so far, and predict who wll win, make references to the Seattle Mariners, " +
+                "Keep responses short")
+            self.own_utterances.append(response.text)
+            return(response.text)
+        elif(self.opp_utterances[-1] == "Tell me how you did that"):
+            response = self.client.models.generate_content(
+            model="gemini-2.0-flash", contents=f"Act like an arrogant {self.k} in a row tic tac toe player who is played {self.playing} " + 
+                f"and was playing an opponent named {self.opponent}, who asked you how you decided where to go. Talk about how smart you" +
+                f"are, and that you did it by evaluating = {self.curr_static} states, andpruned = {self.curr_ab} times with alpha beta pruning. Keep responses short" 
+                )
+            self.own_utterances.append(response.text)
+            return(response.text)
+        elif(state.finished):
+            response = self.client.models.generate_content(
+            model="gemini-2.0-flash", contents=f"Act like an arrogant {self.k} in a row tic tac toe player who is played {self.playing} " + 
+                f"and was playing an opponent named {self.opponent} {board} Say the game is over")
+            self.own_utterances.append(response.text)
+            return(response.text)
+        else:
+            response = self.client.models.generate_content(
+            model="gemini-2.0-flash", contents=f"Act like an arrogant {self.k} in a row tic tac toe player who is playing {self.playing} " + 
+                f"is in the middle of playing an opponent named {self.opponent} {board}  who just said "+
+                f"{self.opp_utterances[-1]}. Make references to the Seattle Mariners Keep responses to a line")
+            self.own_utterances.append(response.text)
+            return(response.text)
+        
+    ## helper method for minimax method
+    ## iterates over the current board
+    ## checks for empty spaces
+    ## returns spaces for a possible move
+    def get_moves(self, state):
+        return [(row, col) for row in range(len(state.board)) for col in range(len(state.board[0])) if state.board[row][col] == " "]
+    
+    def apply_action(self, state, move):
+        if move is None:
+            return state
+        row, col = move 
+        new_state = State(old=state)
+        new_state.board[row][col] = state.whose_move
+        new_state.change_turn()
+        return new_state
+
+    # The main adversarial search function:
+    def minimax(self,
+            state,
+            depth_remaining,
+            pruning,
+            alpha,
+            beta):
+        ## base case that board is full or no more moves available 
+        if depth_remaining == 0:
+            if self.special:
+                self.curr_static += 1
+                return [spec_static_by_table.special_static_eval_fn(state), None]
+            else:
+                self.curr_static += 1
+                return [self.static_eval(state, self.current_game_type), None]
+        
+        if (state.whose_move == 'X'):
+            curr = float('-inf')
+            moves = self.get_moves(state)
+            for move in moves:
+                currAlpha = self.minimax(self.apply_action(state, move), depth_remaining - 1, pruning, alpha, beta)
+                curr = curr if curr > currAlpha[0] else currAlpha[0]
+                alpha = curr if curr > alpha else alpha
+                if pruning:
+                    if alpha >= beta:
+                        self.curr_ab += 1
+                        return [alpha, None]
+            return [curr, None]
+        curr = float('inf')
+        moves = self.get_moves(state)
+        for move in moves:
+            currBeta = self.minimax(self.apply_action(state, move), depth_remaining - 1, pruning, alpha, beta)
+            curr = curr if curr < currBeta[0] else currBeta[0]
+            beta = curr if curr < beta else beta
+            if pruning:
+                if beta <= alpha:
+                    self.curr_ab += 1
+                    return [beta, None]
+        return [curr, None] 
+        
+        
+        
+
+
+           
+        ##default_score = 0 # Value of the passed-in state. Needs to be computed.
+        ##return [default_score, "Terminal state reached", "more Terminal state reached"]
+        # Only the score is required here but other stuff can be returned
+        # in the list, after the score, in case you want to pass info
+        # back from recursive calls that might be used in your utterances,
+        # etc. 
+
+    ## helper method for static eval function
+    ## checks current players turn
+    ## has a set of possible moves
+    ## iterates over the current moves setting current positions to 0
+    ## iterating over length k and keeping track of each player's turn
+    ## implementing static eval function that adds a positive exponential value
+    ## to maximimizing player and negative exponential value to minimizing player
+  
+    def static_eval(self, state, game_type):
+        self.curr_static += 1
+        # print('calling static_eval. Its value needs to be computed!')
+        # Values should be higher when the states are better for X,
+        # lower when better for O.
+        static_score = 0
+        lines = self.get_all_lines(state.board, game_type.k)
+        for line in lines:
+            unbl_X = self.count_unblocked('X', line, game_type.k)
+            unbl_O = self.count_unblocked('O', line, game_type.k)
+            score_X = unbl_X*(10**unbl_X)
+            score_O = unbl_O*(10**unbl_O)
+            static_score += score_X - score_O
+        return static_score
+
+    def count_unblocked(self, player, line, k):
+        most_unblocked = 0
+        curr_unblocked = 0
+        spaces = 0
+        for i in range(len(line)):
+            if (line[i] == player):
+                curr_unblocked += 1
+                spaces += 1
+            elif (line[i] == " "):
+                spaces += 1
+            else: 
+                if spaces >= k:
+                    if curr_unblocked > most_unblocked:
+                        most_unblocked = curr_unblocked
+                spaces = 0
+                curr_unblocked = 0
+                        
+        if spaces >= k:
+                if curr_unblocked > most_unblocked:
+                    most_unblocked = curr_unblocked
+            
+        return most_unblocked
+    
+    def get_all_lines(self, board, k):
+        i = len(board)
+        j = len(board[0])
+        lines = []
+        cols = [[] for _ in range(j)]
+        rows = [[] for _ in range(i)]
+
+        diagonal = [[] for _ in range(i + j - 1)]
+
+        backwards_diagonal = [[] for _ in range(len(diagonal))]
+
+        min_backwards_diagonal = (- i + 1)
+
+        for x_col in range(j):
+            for y_col in range(i):
+                cols[x_col].append(board[y_col][x_col])
+                rows[y_col].append(board[y_col][x_col])
+
+                diagonal[x_col + y_col].append(board[y_col][x_col])
+
+                backwards_diagonal[x_col - y_col - min_backwards_diagonal].append(board[y_col][x_col])
+            
+        for col in cols:
+            lines.append(col)
+
+        for row in rows:
+            lines.append(row)
+        for diag in diagonal:
+            if (len(diag) >= k):
+                lines.append(diag)
+        for diag in backwards_diagonal:
+            if (len(diag) >= k):
+                lines.append(diag)
+        return lines
+
+ 
+# OPTIONAL THINGS TO KEEP TRACK OF:
+
+#  WHO_MY_OPPONENT_PLAYS = other(WHO_I_PLAY)
+#  MY_PAST_UTTERANCES = []
+#  OPPONENT_PAST_UTTERANCES = []
+#  UTTERANCE_COUNT = 0
+#  REPEAT_COUNT = 0 or a table of these if you are reusing different utterances
+
+
+
+'''Special static evaluator for a specific set of
+Tic-Tac-Toe states is provided here for testing
+minimax and alpha-beta search.
+
+'''
+
+import game_types
+SE_TABLE = {
+'OOXXOX  X': 91,
+'OOXXO X X': 10,
+'OOXXO  XX': 20,
+'OOXXXO  X': 11,
+'OOXX OX X': 19,
+'OOXX O XX': 11,
+'OOXXX O X': 20,
+'OOXX XO X': 109,
+'OOXX  OXX': 11,
+'OOXXX  OX': 30,
+'OOXX X OX': 101,
+'OOXX  XOX': 11 }
+
+STATIC_EVAL_COUNT = 0
+def special_static_eval_fn(state):
+    global STATIC_EVAL_COUNT
+    try: 
+        code = state_quick_code(state)
+    except:
+        print("Warning: special static evaluation function is intended for TTT states only.")
+        code = ''
+    try:
+        static_val = SE_TABLE[code]
+    except KeyError:
+        static_val = 0
+        print("Warning: a state given to the special_static_eval_fn has no pre-computed static value in the table.")
+    STATIC_EVAL_COUNT += 1
+    return static_val
+
+def state_quick_code(state):
+    # Use as a hash, but there should never be collisions.
+    b = state.board
+    flat=sum(b, [])
+    code="".join(flat)
+    return code
+'''winTesterForK.py
+ This function takes a state s (with components s.board and s.whoseMove),
+ a move of the form [i, j], and a parameter k.
+ The move tells where the last move was made.  Any win is assumed
+ to include the position of the last move.
+ The parameter k tells how many Xs or Os in a row is required for a win.
+ It returns either "No win" or a string describing where a win occurs.
+'''
+
+def winTesterForK(s, move, k):
+    board = s.board
+    who = s.whose_move
+    moveI, moveJ = move
+    whoWent = board[moveI][moveJ]
+    if not whoWent in ['X', 'O']:
+        return "Invalid Player Token in Move: '"+whoWent+"'"
+    H = len(board) # height of board = num. of rows
+    W = len(board[0]) # width of board = num. of cols.
+    plusDirections  = [(0,1),(1,1),(1,0),(-1,1)] # E, NE, N, NW
+    minusDirections = [(0,-1),(-1,-1),(-1,0),(1,-1)] # W, SW, S, SE
+    for di in range(4):
+        dp = plusDirections[di]
+        dm = minusDirections[di]
+        # count number of Xs (or Os) in plusDirection:
+        count = 1
+        i = moveI
+        j = moveJ
+        for step in range(k-1):
+            i += dp[0]
+            if i < 0 or i >= H: break # off the board 
+            j += dp[1]
+            if j < 0 or j >= W: break #   "   "    "
+            if board[i][j] != whoWent: break # the run ends.
+            count += 1
+        # add in the number of Xs (or Os) in minusDirection:
+        i = moveI
+        j = moveJ
+        for step in range(k-1):
+            i += dm[0]
+            if i < 0 or i >= H: break # off the board 
+            j += dm[1]
+            if j < 0 or j >= W: break #   "   "    "
+            if board[i][j] != whoWent: break # the run ends.
+            count += 1
+            if count==k: break
+        if count>=k:
+            iWin = i - dm[0]
+            jWin = j - dm[1]
+            return "Win for "+whoWent+" at ["+str(iWin)+"]["+str(jWin)+"] in direction "+str(dp)
+            
+    return 'No win'
+

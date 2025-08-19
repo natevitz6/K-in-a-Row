@@ -1,0 +1,67 @@
+﻿We would like to enter the competition. Our submitted game transcript file went against an agent called Arrogant Agent, and was made by Soha Sultana and Dane Grassy.
+
+
+Part 1A: Implementing reordering of search using static evaluation
+Testing state:
++---------------------+
+| -  .  .  .  .  .  - |
+| .  O  .  .  .  X  . |
+| .  .  .  .  .  .  . |
+| .  .  .  X  .  .  . |
+| .  .  .  .  .  .  . |
+| .  X  .  .  .  O  . |
+| -  .  .  .  .  .  - |
++---------------------+
+It is O's turn to move.
+
+
+Results without move ordering:
+Time: 1.0001 seconds
+Static Evaluations: 33744
+Alpha-Beta Cutoffs: 1097
+
+
+Results with move ordering:
+Time: 1.0001 seconds
+Static Evaluations: 33924
+Alpha-Beta Cutoffs: 641
+
+
+
+
+Testing state:
++---------------------+
+| -  O  X  .  X  .  - |
+| .  O  O  X  O  X  . |
+| X  X  O  O  X  .  . |
+| .  O  X  X  O  O  . |
+| .  X  O  O  X  .  . |
+| .  O  X  .  O  X  . |
+| -  .  .  .  .  .  - |
++---------------------+
+It is X's turn to move.
+
+
+Results without move ordering:
+Time: 0.5139 seconds
+Static Evaluations: 18278
+Alpha-Beta Cutoffs: 1304
+
+
+Results with move ordering:
+Time: 0.1556 seconds
+Static Evaluations: 4527
+Alpha-Beta Cutoffs: 599
+
+
+The results above are from our test_move_ordering method that we used to see the benefits of ordering the possible moves at each state we arrive at in minimax. As you can see, the benefits were far greater in the later stages of the game when the potential scores for the possible moves had a greater range of possibilities compared to the early game state. Early in the game almost all possible moves have such a low score that ordering the moves has a negligible effect on the efficiency of the code. However, later in the game as shown above, ordering the moves is far faster, taking less than a third of the time to get through the max_ply we set for the test compared to the non-ordering test and it had to evaluate far fewer states because it more quickly found the winning moves.
+
+
+
+
+Part 2B: Responding to opponent’s remark of "Tell me how you did that"
+If our opponent asks “Tell me how you did that,” our agent will respond by giving a detailed description of the agent’s thought process behind making that move. This works by calling our function called “explain_last_move.” If there was no previous move, our agent will respond by saying we do not have information about the last move. Otherwise, the agent will report the time our agent spent thinking about what move to make, how many static evaluations and how many alpha-beta cutoffs he made. These values are stored during the search, and incremented when it occurs. For example, if an alpha-beta cut off occurs, the alpha_beta_cutoffs variable will increment, and our function will use this variable when reporting how we decided our previous move.
+
+
+Part 2C: Responding to opponent's remark of "What's your take on the game so far?"
+If our opponent asks “What’s your take on the game so far?” our agent will respond with a game summary and win prediction. This is done so by calling our “generate_game_summery” function. This function will loop through every state in the game_history, and for each state, mention which player made a move, and what the move was. The function will also give a prediction of which player will win given the current state of the game. Our agent does this by using the static evaluation of the current game state. If the static evaluation of the current board state is greater than k*20 (which is what we set the heuristic threshold to be in our program), it will predict X to win. If the static evaluation of the current board state is less than k*-20, it will predict the O player to win. If neither conditions match, the agent will report back that it thinks the game will end in a draw.
